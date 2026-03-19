@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Subcontractor Invoice Reconciler</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f4; color: #1a1a1a; font-size: 15px; }
+    .app { max-width: 980px; margin: 0 auto; padding: 2rem 1.5rem; }
+    .header { margin-bottom: 2rem; }
+    .header h1 { font-size: 22px; font-weight: 600; }
+    .header p { font-size: 14px; color: #666; margin-top: 4px; }
+    .db-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; margin-top: 6px; color: #666; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: #ccc; flex-shrink: 0; }
+    .dot.connected { background: #16a34a; }
+    .dot.error { background: #dc2626; }
+    .tabs { display: flex; border-bottom: 1px solid #ddd; margin-bottom: 0; background: #fff; border-radius: 10px 10px 0 0; padding: 0 1rem; }
+    .tab { padding: 12px 18px; font-size: 14px; cursor: pointer; border: none; background: none; color: #666; border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500; transition: color 0.15s; }
+    .tab:hover { color: #1a1a1a; }
+    .tab.active { color: #1a1a1a; border-bottom-color: #1a1a1a; }
+    .panel { display: none; background: #fff; border-radius: 0 0 10px 10px; padding: 1.5rem; border: 1px solid #ddd; border-top: none; }
+    .panel.active { display: block; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1rem; }
+    @media (max-width: 640px) { .two-col { grid-template-columns: 1fr; } }
+    .label { font-size: 13px; font-weight: 600; color: #444; margin-bottom: 6px; display: block; }
+    .upload-zone { border: 1.5px dashed #ccc; border-radius: 10px; padding: 1.5rem; text-align: center; cursor: pointer; transition: background 0.15s, border-color 0.15s; margin-bottom: 10px; }
+    .upload-zone:hover { background: #fafaf9; border-color: #999; }
+    .upload-zone p { font-size: 14px; color: #666; }
+    .file-input { display: none; }
+    .uploaded-file { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #f5f5f4; border-radius: 8px; margin-bottom: 10px; font-size: 13px; border: 1px solid #e5e5e4; }
+    .file-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; letter-spacing: 0.5px; }
+    .file-badge.invoice { background: #dbeafe; color: #1d4ed8; }
+    .file-badge.scope { background: #dcfce7; color: #166534; }
+    textarea { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 13px; font-family: 'SF Mono', 'Fira Code', monospace; background: #fafaf9; color: #1a1a1a; resize: vertical; line-height: 1.6; outline: none; transition: border-color 0.15s; }
+    textarea:focus { border-color: #888; }
+    input[type="text"] { width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 14px; background: #fafaf9; color: #1a1a1a; outline: none; transition: border-color 0.15s; }
+    input[type="text"]:focus { border-color: #888; }
+    .btn { padding: 9px 18px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid #ddd; background: #fff; color: #1a1a1a; transition: background 0.15s; }
+    .btn:hover { background: #f5f5f4; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+    .btn-primary:hover { background: #333; }
+    .btn-danger { border-color: #fca5a5; color: #dc2626; }
+    .btn-danger:hover { background: #fef2f2; }
+    .actions { display: flex; gap: 10px; margin-top: 1.25rem; align-items: center; flex-wrap: wrap; }
+    .result-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 10px; }
+    .result-header h2 { font-size: 18px; font-weight: 600; }
+    .result-header p { font-size: 13px; color: #666; margin-top: 3px; max-width: 600px; }
+    .rec-badge { font-weight: 600; font-size: 13px; padding: 6px 16px; border-radius: 8px; flex-shrink: 0; }
+    .rec-badge.APPROVE { background: #dcfce7; color: #166534; }
+    .rec-badge.REVIEW  { background: #fef9c3; color: #854d0e; }
+    .rec-badge.REJECT  { background: #fee2e2; color: #991b1b; }
+    .summary-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 1.25rem; }
+    .metric { background: #f5f5f4; border-radius: 8px; padding: 14px; }
+    .metric-label { font-size: 12px; color: #666; margin-bottom: 4px; }
+    .metric-value { font-size: 22px; font-weight: 700; }
+    .metric-value.red { color: #dc2626; }
+    .metric-value.green { color: #16a34a; }
+    .section-card { border: 1px solid #e5e5e4; border-radius: 10px; padding: 1.25rem; margin-bottom: 1rem; }
+    .section-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+    .flag { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; font-size: 14px; line-height: 1.5; }
+    .flag:last-child { margin-bottom: 0; }
+    .flag.danger  { background: #fef2f2; border-left: 3px solid #ef4444; }
+    .flag.warning { background: #fffbeb; border-left: 3px solid #f59e0b; }
+    .flag.info    { background: #eff6ff; border-left: 3px solid #3b82f6; }
+    .flag-icon { flex-shrink: 0; font-weight: 700; font-size: 13px; margin-top: 1px; }
+    .flag.danger  .flag-icon { color: #dc2626; }
+    .flag.warning .flag-icon { color: #d97706; }
+    .flag.info    .flag-icon { color: #2563eb; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+    th { text-align: left; padding: 7px 10px; color: #666; border-bottom: 1px solid #e5e5e4; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; }
+    td { padding: 8px 10px; border-bottom: 1px solid #f0f0ef; word-break: break-word; vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    .status-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; display: inline-block; white-space: nowrap; }
+    .status-badge.ok   { background: #dcfce7; color: #166534; }
+    .status-badge.flag { background: #fee2e2; color: #991b1b; }
+    .status-badge.warn { background: #fef9c3; color: #854d0e; }
+    .history-filters { display: flex; gap: 6px; margin-bottom: 1rem; flex-wrap: wrap; }
+    .filter-btn { padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid #ddd; background: #fff; color: #666; transition: all 0.15s; }
+    .filter-btn.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+    .history-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid #e5e5e4; border-radius: 10px; margin-bottom: 8px; font-size: 14px; transition: background 0.12s; }
+    .history-item:hover { background: #fafaf9; }
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #ddd; border-top-color: #1a1a1a; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-box { text-align: center; padding: 3rem; color: #888; font-size: 14px; }
+    .empty { text-align: center; padding: 3rem; color: #888; font-size: 14px; }
+    .toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a1a; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 9999; }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>Subcontractor Invoice Reconciler</h1>
+    <p>AI-powered matching of invoices against scope-of-work docs — flags discrepancies automatically</p>
+    <div class="db-status">
+      <div class="dot" id="db-dot"></div>
+      <span id="db-label">Connecting to Supabase...</span>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('upload')">Upload &amp; Analyze</button>
+    <button class="tab" onclick="switchTab('results')">Results</button>
+    <button class="tab" onclick="switchTab('history')">History <span id="history-count" style="font-size:11px;color:#999;"></span></button>
+  </div>
+
+  <div id="panel-upload" class="panel active">
+    <div class="two-col">
+      <div>
+        <span class="label">Invoice</span>
+        <div class="upload-zone" onclick="document.getElementById('inv-file').click()">
+          <p><strong>Click to upload invoice</strong></p>
+          <p style="font-size:12px;margin-top:4px;">PDF, PNG, JPG — or paste text below</p>
+        </div>
+        <input type="file" class="file-input" id="inv-file" accept=".pdf,.png,.jpg,.jpeg" onchange="handleFile(event,'invoice')">
+        <div id="inv-filename" style="display:none" class="uploaded-file">
+          <span class="file-badge invoice">INVOICE</span>
+          <span id="inv-name" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+          <span style="cursor:pointer;color:#999;" onclick="clearFile('invoice')">✕</span>
+        </div>
+        <span class="label">Or paste invoice text</span>
+        <textarea id="inv-text" rows="7" placeholder="Paste raw invoice text here...&#10;&#10;Example:&#10;INVOICE #1042&#10;ABC Electrical LLC&#10;Labor: 40hrs @ $85/hr = $3,400&#10;Materials: $1,200&#10;TOTAL: $4,600"></textarea>
+      </div>
+      <div>
+        <span class="label">Scope of Work</span>
+        <div class="upload-zone" onclick="document.getElementById('sow-file').click()">
+          <p><strong>Click to upload scope doc</strong></p>
+          <p style="font-size:12px;margin-top:4px;">PDF, PNG, JPG — or paste text below</p>
+        </div>
+        <input type="file" class="file-input" id="sow-file" accept=".pdf,.png,.jpg,.jpeg" onchange="handleFile(event,'scope')">
+        <div id="sow-filename" style="display:none" class="uploaded-file">
+          <span class="file-badge scope">SCOPE</span>
+          <span id="sow-name" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+          <span style="cursor:pointer;color:#999;" onclick="clearFile('scope')">✕</span>
+        </div>
+        <span class="label">Or paste scope of work text</span>
+        <textarea id="sow-text" rows="7" placeholder="Paste scope of work text here...&#10;&#10;Example:&#10;SCOPE: Electrical Rough-In&#10;Approved labor: 32hrs @ $85/hr&#10;Materials budget: $900&#10;NOT included: Conduit on floors 3-5"></textarea>
+      </div>
+    </div>
+    <div style="margin-bottom:1rem;">
+      <span class="label">Subcontractor name (optional)</span>
+      <input type="text" id="sub-name" placeholder="e.g. ABC Electrical LLC">
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="analyze-btn" onclick="runAnalysis()">Analyze Invoice</button>
+      <button class="btn" onclick="loadDemo()">Load demo data</button>
+      <span id="analyze-status" style="font-size:13px;color:#666;"></span>
+    </div>
+  </div>
+
+  <div id="panel-results" class="panel">
+    <div id="results-content">
+      <div class="empty">No analysis run yet. Upload documents and click Analyze Invoice.</div>
+    </div>
+  </div>
+
+  <div id="panel-history" class="panel">
+    <div class="history-filters">
+      <button class="filter-btn active" onclick="filterHistory('ALL',this)">All</button>
+      <button class="filter-btn" onclick="filterHistory('APPROVE',this)">Approved</button>
+      <button class="filter-btn" onclick="filterHistory('REVIEW',this)">Review</button>
+      <button class="filter-btn" onclick="filterHistory('REJECT',this)">Rejected</button>
+    </div>
+    <div id="history-list">
+      <div class="loading-box"><span class="spinner"></span> Loading history...</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://wlqqtavxkpkewnphzijs.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_vGbP8Ok6yJWB6k3BHvlJYw_pRYcsVcr';
+
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let state = { invFile: null, sowFile: null, history: [], filter: 'ALL' };
+
+async function initDB() {
+  try {
+    const { error } = await db.from('reconciliations').select('id').limit(1);
+    if (error) throw error;
+    document.getElementById('db-dot').className = 'dot connected';
+    document.getElementById('db-label').textContent = 'Connected to Supabase';
+    loadHistory();
+  } catch (e) {
+    document.getElementById('db-dot').className = 'dot error';
+    document.getElementById('db-label').textContent = 'DB connection failed: ' + e.message;
+  }
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function switchTab(t) {
+  document.querySelectorAll('.tab').forEach((el, i) => el.classList.toggle('active', ['upload','results','history'][i] === t));
+  document.querySelectorAll('.panel').forEach(el => el.classList.remove('active'));
+  document.getElementById('panel-' + t).classList.add('active');
+}
+
+function handleFile(e, type) {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (type === 'invoice') {
+    state.invFile = file;
+    document.getElementById('inv-filename').style.display = 'flex';
+    document.getElementById('inv-name').textContent = file.name;
+  } else {
+    state.sowFile = file;
+    document.getElementById('sow-filename').style.display = 'flex';
+    document.getElementById('sow-name').textContent = file.name;
+  }
+}
+
+function clearFile(type) {
+  if (type === 'invoice') {
+    state.invFile = null;
+    document.getElementById('inv-filename').style.display = 'none';
+    document.getElementById('inv-file').value = '';
+  } else {
+    state.sowFile = null;
+    document.getElementById('sow-filename').style.display = 'none';
+    document.getElementById('sow-file').value = '';
+  }
+}
+
+function loadDemo() {
+  document.getElementById('inv-text').value = `INVOICE #1042\nABC Electrical LLC\nDate: March 10, 2026\nProject: Westbrook Apartments, Unit 4B\n\nLine Items:\n- Electrical labor: 40 hrs @ $85/hr = $3,400\n- Wire & cable materials: $850\n- Conduit (floors 3-5): $1,100\n- Panel connection work: $450\n- Permit fee: $250\n- Rush surcharge: $300\n\nSUBTOTAL: $6,350\nTAX (8.25%): $524\nTOTAL DUE: $6,874`;
+  document.getElementById('sow-text').value = `SCOPE OF WORK — Electrical Rough-In\nProject: Westbrook Apartments, Unit 4B\nContractor: ABC Electrical LLC\nApproved: Feb 28, 2026\n\nApproved Scope:\n- Electrical rough-in labor: 32 hrs @ $85/hr (max)\n- Materials budget: $900 (wire, outlets, boxes)\n- Panel connections for Unit 4B\n- Permit procurement (owner-supplied, $0 to sub)\n\nNOT IN SCOPE:\n- Conduit runs on floors 3-5 (separate contract)\n- Rush/premium charges not pre-approved\n- Any work outside Unit 4B\n\nPayment terms: Net 30 upon inspection approval.`;
+  document.getElementById('sub-name').value = 'ABC Electrical LLC';
+}
+
+async function runAnalysis() {
+  const invText = document.getElementById('inv-text').value.trim();
+  const sowText = document.getElementById('sow-text').value.trim();
+  const subName = document.getElementById('sub-name').value.trim();
+
+  if (!invText && !state.invFile) { alert('Please provide an invoice (text or file).'); return; }
+  if (!sowText && !state.sowFile) { alert('Please provide a scope of work (text or file).'); return; }
+
+  const btn = document.getElementById('analyze-btn');
+  const status = document.getElementById('analyze-status');
+  btn.disabled = true;
+  status.innerHTML = '<span class="spinner"></span> Analyzing with AI...';
+
+  switchTab('results');
+  document.getElementById('results-content').innerHTML = '<div class="loading-box"><span class="spinner" style="width:22px;height:22px;margin-right:0;display:block;margin:0 auto 12px;"></span>Reading documents and reconciling...</div>';
+
+  try {
+    // Use FormData so we can send files + text together
+    const formData = new FormData();
+    if (invText) formData.append('invoice_text', invText);
+    if (sowText) formData.append('scope_text', sowText);
+    if (subName) formData.append('sub_name', subName);
+    if (state.invFile) formData.append('invoice_file', state.invFile);
+    if (state.sowFile) formData.append('scope_file', state.sowFile);
+
+    // Call our local server — no CORS issues, API key stays safe
+    const resp = await fetch('/api/analyze', { method: 'POST', body: formData });
+    const data = await resp.json();
+
+    if (data.error) throw new Error(data.error);
+    const result = data.result;
+
+    // Save to Supabase
+    const { error: dbError } = await db.from('reconciliations').insert({
+      sub_name: result.sub_name,
+      invoice_number: result.invoice_number,
+      invoice_total: result.invoice_total,
+      approved_total: result.approved_total,
+      discrepancy_amount: result.discrepancy_amount,
+      recommendation: result.recommendation,
+      summary: result.summary,
+      result_json: result,
+      invoice_text: invText,
+      scope_text: sowText
+    });
+
+    if (dbError) showToast('Analysis done but DB save failed: ' + dbError.message);
+    else { showToast('Saved to Supabase'); loadHistory(); }
+
+    renderResult(result);
+
+  } catch (err) {
+    document.getElementById('results-content').innerHTML = `
+      <div class="section-card">
+        <h3 style="color:#dc2626;">Analysis failed</h3>
+        <p style="font-size:14px;margin-top:8px;color:#666;">${err.message}</p>
+        <p style="font-size:13px;margin-top:8px;color:#888;">Make sure the server is running: <code>npm start</code> in your terminal.</p>
+      </div>`;
+  }
+
+  btn.disabled = false;
+  status.innerHTML = '';
+}
+
+function renderResult(result) {
+  const rec = result.recommendation || 'REVIEW';
+  const disc = Math.abs(result.discrepancy_amount || 0);
+
+  const flagsHtml = (result.flags || []).map(f =>
+    `<div class="flag ${f.severity}">
+      <span class="flag-icon">${f.severity === 'danger' ? '✕' : f.severity === 'warning' ? '!' : 'i'}</span>
+      <div><strong>${f.title}</strong><br><span style="color:#555;">${f.detail}</span></div>
+    </div>`
+  ).join('');
+
+  const rowsHtml = (result.line_items || []).map(li => {
+    const cls = li.status === 'OK' ? 'ok' : (li.status === 'NOT_IN_SCOPE' || li.status === 'OVER_BUDGET') ? 'flag' : 'warn';
+    return `<tr>
+      <td style="width:34%">${li.description}</td>
+      <td style="width:14%;text-align:right">${li.invoiced_amount != null ? '$' + Number(li.invoiced_amount).toLocaleString() : '—'}</td>
+      <td style="width:14%;text-align:right">${li.approved_amount != null ? '$' + Number(li.approved_amount).toLocaleString() : '—'}</td>
+      <td style="width:18%;text-align:center"><span class="status-badge ${cls}">${li.status.replace(/_/g,' ')}</span></td>
+      <td style="width:20%;color:#666;font-size:12px;">${li.note || ''}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('results-content').innerHTML = `
+    <div class="result-header">
+      <div>
+        <h2>${result.sub_name || 'Invoice Analysis'}${result.invoice_number ? ' — #' + result.invoice_number : ''}</h2>
+        <p>${result.summary}</p>
+      </div>
+      <div class="rec-badge ${rec}">${rec}</div>
+    </div>
+    <div class="summary-grid">
+      <div class="metric"><div class="metric-label">Invoice total</div><div class="metric-value">$${Number(result.invoice_total||0).toLocaleString()}</div></div>
+      <div class="metric"><div class="metric-label">Approved budget</div><div class="metric-value green">$${Number(result.approved_total||0).toLocaleString()}</div></div>
+      <div class="metric"><div class="metric-label">Discrepancy</div><div class="metric-value ${disc > 0 ? 'red' : 'green'}">$${disc.toLocaleString()}</div></div>
+    </div>
+    ${flagsHtml ? `<div class="section-card"><h3>Flags &amp; Issues</h3>${flagsHtml}</div>` : ''}
+    <div class="section-card">
+      <h3>Line item breakdown</h3>
+      <table>
+        <thead><tr>
+          <th style="width:34%">Description</th>
+          <th style="width:14%;text-align:right">Invoiced</th>
+          <th style="width:14%;text-align:right">Approved</th>
+          <th style="width:18%;text-align:center">Status</th>
+          <th style="width:20%">Note</th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" onclick="exportResult()">Export report</button>
+      <button class="btn" onclick="switchTab('upload')">New reconciliation</button>
+    </div>`;
+}
+
+function filterHistory(val, el) {
+  state.filter = val;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderHistory();
+}
+
+async function loadHistory() {
+  try {
+    const { data, error } = await db.from('reconciliations').select('*').order('created_at', { ascending: false }).limit(100);
+    if (error) throw error;
+    state.history = data || [];
+    document.getElementById('history-count').textContent = state.history.length ? `(${state.history.length})` : '';
+    renderHistory();
+  } catch (e) {
+    document.getElementById('history-list').innerHTML = `<div class="empty">Failed to load: ${e.message}</div>`;
+  }
+}
+
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  let items = state.filter === 'ALL' ? state.history : state.history.filter(h => h.recommendation === state.filter);
+  if (!items.length) { list.innerHTML = '<div class="empty">No records found.</div>'; return; }
+
+  list.innerHTML = items.map(h => {
+    const disc = h.discrepancy_amount || 0;
+    const ts = new Date(h.created_at).toLocaleString();
+    return `<div class="history-item">
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${h.sub_name || 'Unknown'}${h.invoice_number ? ' — #' + h.invoice_number : ''}</div>
+        <div style="font-size:12px;color:#888;margin-top:2px;">${ts}</div>
+      </div>
+      <div style="flex-shrink:0;text-align:right;">
+        <div style="font-weight:600;">$${Number(h.invoice_total||0).toLocaleString()}</div>
+        ${disc > 0 ? `<div style="font-size:11px;color:#dc2626;">+$${Number(disc).toLocaleString()} over</div>` : ''}
+      </div>
+      <div class="rec-badge ${h.recommendation}" style="font-size:12px;padding:4px 12px;">${h.recommendation}</div>
+      <button class="btn btn-danger" style="font-size:12px;padding:5px 12px;" onclick="deleteRecord('${h.id}',event)">Delete</button>
+    </div>`;
+  }).join('');
+}
+
+async function deleteRecord(id, e) {
+  e.stopPropagation();
+  if (!confirm('Delete this reconciliation record?')) return;
+  const { error } = await db.from('reconciliations').delete().eq('id', id);
+  if (error) { showToast('Delete failed: ' + error.message); return; }
+  showToast('Record deleted');
+  loadHistory();
+}
+
+function exportResult() {
+  const content = document.getElementById('results-content').innerText;
+  const blob = new Blob([content], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'reconciliation-report.txt';
+  a.click();
+}
+
+initDB();
+</script>
+</body>
+</html>
