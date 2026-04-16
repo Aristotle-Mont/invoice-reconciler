@@ -4,50 +4,73 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Subcontractor Invoice Reconciler</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f4; color: #1a1a1a; font-size: 15px; }
-    .app { max-width: 980px; margin: 0 auto; padding: 2rem 1.5rem; }
-    .header { margin-bottom: 2rem; }
-    .header h1 { font-size: 22px; font-weight: 600; }
-    .header p { font-size: 14px; color: #666; margin-top: 4px; }
-    .db-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; margin-top: 6px; color: #666; }
-    .dot { width: 7px; height: 7px; border-radius: 50%; background: #ccc; flex-shrink: 0; }
-    .dot.connected { background: #16a34a; }
-    .dot.error { background: #dc2626; }
+
+    /* ── Auth screens ── */
+    #auth-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
+    .auth-card { background: #fff; border-radius: 14px; border: 1px solid #e5e5e4; padding: 2.5rem 2rem; width: 100%; max-width: 400px; }
+    .auth-card h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+    .auth-card p.sub { font-size: 14px; color: #666; margin-bottom: 1.75rem; }
+    .auth-field { margin-bottom: 14px; }
+    .auth-field label { display: block; font-size: 13px; font-weight: 600; color: #444; margin-bottom: 5px; }
+    .auth-field input { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 14px; outline: none; background: #fafaf9; transition: border-color 0.15s; }
+    .auth-field input:focus { border-color: #888; }
+    .auth-error { background: #fee2e2; color: #991b1b; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; display: none; }
+    .auth-success { background: #dcfce7; color: #166534; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; display: none; }
+    .auth-toggle { font-size: 13px; color: #666; margin-top: 1rem; text-align: center; }
+    .auth-toggle a { color: #1a1a1a; font-weight: 600; cursor: pointer; text-decoration: underline; }
+
+    /* ── App layout ── */
+    #app-screen { display: none; }
+    .topbar { background: #fff; border-bottom: 1px solid #e5e5e4; padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; height: 54px; }
+    .topbar-left { display: flex; align-items: center; gap: 12px; }
+    .topbar h1 { font-size: 16px; font-weight: 700; }
+    .topbar-right { display: flex; align-items: center; gap: 10px; }
+    .user-badge { font-size: 13px; color: #666; }
+    .app-body { max-width: 980px; margin: 0 auto; padding: 1.75rem 1.5rem; }
+
+    /* ── Tabs ── */
     .tabs { display: flex; border-bottom: 1px solid #ddd; margin-bottom: 0; background: #fff; border-radius: 10px 10px 0 0; padding: 0 1rem; }
-    .tab { padding: 12px 18px; font-size: 14px; cursor: pointer; border: none; background: none; color: #666; border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500; transition: color 0.15s; }
+    .tab { padding: 11px 16px; font-size: 14px; cursor: pointer; border: none; background: none; color: #666; border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500; }
     .tab:hover { color: #1a1a1a; }
     .tab.active { color: #1a1a1a; border-bottom-color: #1a1a1a; }
     .panel { display: none; background: #fff; border-radius: 0 0 10px 10px; padding: 1.5rem; border: 1px solid #ddd; border-top: none; }
     .panel.active { display: block; }
+
+    /* ── Forms ── */
     .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1rem; }
     @media (max-width: 640px) { .two-col { grid-template-columns: 1fr; } }
     .label { font-size: 13px; font-weight: 600; color: #444; margin-bottom: 6px; display: block; }
-    .upload-zone { border: 1.5px dashed #ccc; border-radius: 10px; padding: 1.5rem; text-align: center; cursor: pointer; transition: background 0.15s, border-color 0.15s; margin-bottom: 10px; }
+    .upload-zone { border: 1.5px dashed #ccc; border-radius: 10px; padding: 1.25rem; text-align: center; cursor: pointer; margin-bottom: 10px; transition: background 0.15s; }
     .upload-zone:hover { background: #fafaf9; border-color: #999; }
     .upload-zone p { font-size: 14px; color: #666; }
     .file-input { display: none; }
     .uploaded-file { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #f5f5f4; border-radius: 8px; margin-bottom: 10px; font-size: 13px; border: 1px solid #e5e5e4; }
-    .file-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; letter-spacing: 0.5px; }
+    .file-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; }
     .file-badge.invoice { background: #dbeafe; color: #1d4ed8; }
-    .file-badge.scope { background: #dcfce7; color: #166534; }
-    textarea { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 13px; font-family: 'SF Mono', 'Fira Code', monospace; background: #fafaf9; color: #1a1a1a; resize: vertical; line-height: 1.6; outline: none; transition: border-color 0.15s; }
+    .file-badge.scope   { background: #dcfce7; color: #166534; }
+    textarea { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 13px; font-family: 'SF Mono', monospace; background: #fafaf9; color: #1a1a1a; resize: vertical; line-height: 1.6; outline: none; }
     textarea:focus { border-color: #888; }
-    input[type="text"] { width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 14px; background: #fafaf9; color: #1a1a1a; outline: none; transition: border-color 0.15s; }
-    input[type="text"]:focus { border-color: #888; }
+    input[type="text"], input[type="email"] { width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 14px; background: #fafaf9; color: #1a1a1a; outline: none; }
+    input[type="text"]:focus, input[type="email"]:focus { border-color: #888; }
+
+    /* ── Buttons ── */
     .btn { padding: 9px 18px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid #ddd; background: #fff; color: #1a1a1a; transition: background 0.15s; }
     .btn:hover { background: #f5f5f4; }
     .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .btn-primary { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+    .btn-primary { background: #1a1a1a; color: #fff; border-color: #1a1a1a; width: 100%; padding: 11px; font-size: 15px; }
     .btn-primary:hover { background: #333; }
+    .btn-sm { padding: 6px 14px; font-size: 13px; }
     .btn-danger { border-color: #fca5a5; color: #dc2626; }
     .btn-danger:hover { background: #fef2f2; }
     .actions { display: flex; gap: 10px; margin-top: 1.25rem; align-items: center; flex-wrap: wrap; }
+
+    /* ── Results ── */
     .result-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 10px; }
     .result-header h2 { font-size: 18px; font-weight: 600; }
-    .result-header p { font-size: 13px; color: #666; margin-top: 3px; max-width: 600px; }
+    .result-header p  { font-size: 13px; color: #666; margin-top: 3px; max-width: 600px; }
     .rec-badge { font-weight: 600; font-size: 13px; padding: 6px 16px; border-radius: 8px; flex-shrink: 0; }
     .rec-badge.APPROVE { background: #dcfce7; color: #166534; }
     .rec-badge.REVIEW  { background: #fef9c3; color: #854d0e; }
@@ -56,7 +79,7 @@
     .metric { background: #f5f5f4; border-radius: 8px; padding: 14px; }
     .metric-label { font-size: 12px; color: #666; margin-bottom: 4px; }
     .metric-value { font-size: 22px; font-weight: 700; }
-    .metric-value.red { color: #dc2626; }
+    .metric-value.red   { color: #dc2626; }
     .metric-value.green { color: #16a34a; }
     .section-card { border: 1px solid #e5e5e4; border-radius: 10px; padding: 1.25rem; margin-bottom: 1rem; }
     .section-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
@@ -77,95 +100,173 @@
     .status-badge.ok   { background: #dcfce7; color: #166534; }
     .status-badge.flag { background: #fee2e2; color: #991b1b; }
     .status-badge.warn { background: #fef9c3; color: #854d0e; }
+
+    /* ── History ── */
     .history-filters { display: flex; gap: 6px; margin-bottom: 1rem; flex-wrap: wrap; }
-    .filter-btn { padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid #ddd; background: #fff; color: #666; transition: all 0.15s; }
+    .filter-btn { padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid #ddd; background: #fff; color: #666; }
     .filter-btn.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
     .history-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid #e5e5e4; border-radius: 10px; margin-bottom: 8px; font-size: 14px; transition: background 0.12s; }
     .history-item:hover { background: #fafaf9; }
+
+    /* ── Team panel ── */
+    .team-section { margin-bottom: 1.5rem; }
+    .team-section h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+    .member-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid #e5e5e4; border-radius: 8px; margin-bottom: 8px; font-size: 14px; }
+    .role-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
+    .role-badge.owner  { background: #ede9fe; color: #5b21b6; }
+    .role-badge.member { background: #f3f4f6; color: #374151; }
+    .invite-row { display: flex; gap: 8px; margin-bottom: 1rem; }
+    .invite-row input { flex: 1; }
+
+    /* ── Misc ── */
     .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #ddd; border-top-color: #1a1a1a; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 6px; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .loading-box { text-align: center; padding: 3rem; color: #888; font-size: 14px; }
     .empty { text-align: center; padding: 3rem; color: #888; font-size: 14px; }
     .toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a1a; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 9999; }
     .toast.show { opacity: 1; }
+    .divider { height: 1px; background: #e5e5e4; margin: 1.25rem 0; }
   </style>
 </head>
 <body>
-<div class="app">
-  <div class="header">
-    <h1>Subcontractor Invoice Reconciler</h1>
-    <p>AI-powered matching of invoices against scope-of-work docs — flags discrepancies automatically</p>
-    <div class="db-status">
-      <div class="dot" id="db-dot"></div>
-      <span id="db-label">Connecting to Supabase...</span>
+
+<!-- ══ AUTH SCREEN ══════════════════════════════════════════════════════════ -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <h1 id="auth-title">Sign in</h1>
+    <p class="sub" id="auth-sub">Invoice Reconciler — AI-powered discrepancy detection</p>
+
+    <div id="auth-error" class="auth-error"></div>
+    <div id="auth-success" class="auth-success"></div>
+
+    <div class="auth-field" id="field-name" style="display:none;">
+      <label>Full name</label>
+      <input type="text" id="input-name" placeholder="Jane Smith">
+    </div>
+    <div class="auth-field">
+      <label>Email</label>
+      <input type="email" id="input-email" placeholder="you@company.com">
+    </div>
+    <div class="auth-field">
+      <label>Password</label>
+      <input type="password" id="input-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitAuth()">
+    </div>
+
+    <button class="btn btn-primary" id="auth-btn" onclick="submitAuth()">Sign in</button>
+
+    <div class="auth-toggle">
+      <span id="auth-toggle-text">Don't have an account?</span>
+      <a onclick="toggleAuthMode()">Sign up</a>
+    </div>
+  </div>
+</div>
+
+<!-- ══ APP SCREEN ═══════════════════════════════════════════════════════════ -->
+<div id="app-screen">
+  <div class="topbar">
+    <div class="topbar-left">
+      <h1>Invoice Reconciler</h1>
+    </div>
+    <div class="topbar-right">
+      <span class="user-badge" id="user-email-display"></span>
+      <button class="btn btn-sm" onclick="signOut()">Sign out</button>
     </div>
   </div>
 
-  <div class="tabs">
-    <button class="tab active" onclick="switchTab('upload')">Upload &amp; Analyze</button>
-    <button class="tab" onclick="switchTab('results')">Results</button>
-    <button class="tab" onclick="switchTab('history')">History <span id="history-count" style="font-size:11px;color:#999;"></span></button>
-  </div>
+  <div class="app-body">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('upload')">Upload &amp; Analyze</button>
+      <button class="tab" onclick="switchTab('results')">Results</button>
+      <button class="tab" onclick="switchTab('history')">History <span id="history-count" style="font-size:11px;color:#999;"></span></button>
+      <button class="tab" onclick="switchTab('team')">Team</button>
+    </div>
 
-  <div id="panel-upload" class="panel active">
-    <div class="two-col">
-      <div>
-        <span class="label">Invoice</span>
-        <div class="upload-zone" onclick="document.getElementById('inv-file').click()">
-          <p><strong>Click to upload invoice</strong></p>
-          <p style="font-size:12px;margin-top:4px;">PDF, PNG, JPG — or paste text below</p>
+    <!-- Upload -->
+    <div id="panel-upload" class="panel active">
+      <div class="two-col">
+        <div>
+          <span class="label">Invoice</span>
+          <div class="upload-zone" onclick="document.getElementById('inv-file').click()">
+            <p><strong>Click to upload invoice</strong></p>
+            <p style="font-size:12px;margin-top:4px;">PDF, PNG, JPG — or paste text below</p>
+          </div>
+          <input type="file" class="file-input" id="inv-file" accept=".pdf,.png,.jpg,.jpeg" onchange="handleFile(event,'invoice')">
+          <div id="inv-filename" style="display:none" class="uploaded-file">
+            <span class="file-badge invoice">INVOICE</span>
+            <span id="inv-name" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+            <span style="cursor:pointer;color:#999;" onclick="clearFile('invoice')">✕</span>
+          </div>
+          <span class="label">Or paste invoice text</span>
+          <textarea id="inv-text" rows="7" placeholder="Paste raw invoice text here..."></textarea>
         </div>
-        <input type="file" class="file-input" id="inv-file" accept=".pdf,.png,.jpg,.jpeg" onchange="handleFile(event,'invoice')">
-        <div id="inv-filename" style="display:none" class="uploaded-file">
-          <span class="file-badge invoice">INVOICE</span>
-          <span id="inv-name" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
-          <span style="cursor:pointer;color:#999;" onclick="clearFile('invoice')">✕</span>
+        <div>
+          <span class="label">Scope of Work</span>
+          <div class="upload-zone" onclick="document.getElementById('sow-file').click()">
+            <p><strong>Click to upload scope doc</strong></p>
+            <p style="font-size:12px;margin-top:4px;">PDF, PNG, JPG — or paste text below</p>
+          </div>
+          <input type="file" class="file-input" id="sow-file" accept=".pdf,.png,.jpg,.jpeg" onchange="handleFile(event,'scope')">
+          <div id="sow-filename" style="display:none" class="uploaded-file">
+            <span class="file-badge scope">SCOPE</span>
+            <span id="sow-name" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+            <span style="cursor:pointer;color:#999;" onclick="clearFile('scope')">✕</span>
+          </div>
+          <span class="label">Or paste scope of work text</span>
+          <textarea id="sow-text" rows="7" placeholder="Paste scope of work text here..."></textarea>
         </div>
-        <span class="label">Or paste invoice text</span>
-        <textarea id="inv-text" rows="7" placeholder="Paste raw invoice text here...&#10;&#10;Example:&#10;INVOICE #1042&#10;ABC Electrical LLC&#10;Labor: 40hrs @ $85/hr = $3,400&#10;Materials: $1,200&#10;TOTAL: $4,600"></textarea>
       </div>
-      <div>
-        <span class="label">Scope of Work</span>
-        <div class="upload-zone" onclick="document.getElementById('sow-file').click()">
-          <p><strong>Click to upload scope doc</strong></p>
-          <p style="font-size:12px;margin-top:4px;">PDF, PNG, JPG — or paste text below</p>
-        </div>
-        <input type="file" class="file-input" id="sow-file" accept=".pdf,.png,.jpg,.jpeg" onchange="handleFile(event,'scope')">
-        <div id="sow-filename" style="display:none" class="uploaded-file">
-          <span class="file-badge scope">SCOPE</span>
-          <span id="sow-name" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
-          <span style="cursor:pointer;color:#999;" onclick="clearFile('scope')">✕</span>
-        </div>
-        <span class="label">Or paste scope of work text</span>
-        <textarea id="sow-text" rows="7" placeholder="Paste scope of work text here...&#10;&#10;Example:&#10;SCOPE: Electrical Rough-In&#10;Approved labor: 32hrs @ $85/hr&#10;Materials budget: $900&#10;NOT included: Conduit on floors 3-5"></textarea>
+      <div style="margin-bottom:1rem;">
+        <span class="label">Subcontractor name (optional)</span>
+        <input type="text" id="sub-name" placeholder="e.g. ABC Electrical LLC">
+      </div>
+      <div class="actions">
+        <button class="btn" style="background:#1a1a1a;color:#fff;border-color:#1a1a1a;" id="analyze-btn" onclick="runAnalysis()">Analyze Invoice</button>
+        <button class="btn" onclick="loadDemo()">Load demo data</button>
+        <span id="analyze-status" style="font-size:13px;color:#666;"></span>
       </div>
     </div>
-    <div style="margin-bottom:1rem;">
-      <span class="label">Subcontractor name (optional)</span>
-      <input type="text" id="sub-name" placeholder="e.g. ABC Electrical LLC">
-    </div>
-    <div class="actions">
-      <button class="btn btn-primary" id="analyze-btn" onclick="runAnalysis()">Analyze Invoice</button>
-      <button class="btn" onclick="loadDemo()">Load demo data</button>
-      <span id="analyze-status" style="font-size:13px;color:#666;"></span>
-    </div>
-  </div>
 
-  <div id="panel-results" class="panel">
-    <div id="results-content">
-      <div class="empty">No analysis run yet. Upload documents and click Analyze Invoice.</div>
+    <!-- Results -->
+    <div id="panel-results" class="panel">
+      <div id="results-content">
+        <div class="empty">No analysis run yet. Upload documents and click Analyze Invoice.</div>
+      </div>
     </div>
-  </div>
 
-  <div id="panel-history" class="panel">
-    <div class="history-filters">
-      <button class="filter-btn active" onclick="filterHistory('ALL',this)">All</button>
-      <button class="filter-btn" onclick="filterHistory('APPROVE',this)">Approved</button>
-      <button class="filter-btn" onclick="filterHistory('REVIEW',this)">Review</button>
-      <button class="filter-btn" onclick="filterHistory('REJECT',this)">Rejected</button>
+    <!-- History -->
+    <div id="panel-history" class="panel">
+      <div class="history-filters">
+        <button class="filter-btn active" onclick="filterHistory('ALL',this)">All</button>
+        <button class="filter-btn" onclick="filterHistory('APPROVE',this)">Approved</button>
+        <button class="filter-btn" onclick="filterHistory('REVIEW',this)">Review</button>
+        <button class="filter-btn" onclick="filterHistory('REJECT',this)">Rejected</button>
+      </div>
+      <div id="history-list"><div class="loading-box"><span class="spinner"></span> Loading...</div></div>
     </div>
-    <div id="history-list">
-      <div class="loading-box"><span class="spinner"></span> Loading history...</div>
+
+    <!-- Team -->
+    <div id="panel-team" class="panel">
+      <div class="team-section" id="team-create-section">
+        <h3>Create your team</h3>
+        <p style="font-size:14px;color:#666;margin-bottom:12px;">Create a team to invite colleagues and share reconciliations.</p>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="team-name-input" placeholder="e.g. Westbrook GC" style="flex:1;">
+          <button class="btn" style="background:#1a1a1a;color:#fff;border-color:#1a1a1a;" onclick="createTeam()">Create team</button>
+        </div>
+      </div>
+
+      <div class="team-section" id="team-info-section" style="display:none;">
+        <h3 id="team-name-display"></h3>
+        <div class="divider"></div>
+        <h3 style="margin-bottom:12px;">Invite a teammate</h3>
+        <div class="invite-row">
+          <input type="email" id="invite-email" placeholder="colleague@company.com">
+          <button class="btn" style="background:#1a1a1a;color:#fff;border-color:#1a1a1a;" onclick="sendInvite()">Send invite</button>
+        </div>
+        <div id="invite-status" style="font-size:13px;color:#666;margin-bottom:1rem;"></div>
+        <h3 style="margin-bottom:10px;">Team members</h3>
+        <div id="members-list"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -173,26 +274,121 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const SUPABASE_URL = 'https://wlqqtavxkpkewnphzijs.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_vGbP8Ok6yJWB6k3BHvlJYw_pRYcsVcr';
+let session = null;
+let currentUser = null;
+let currentTeam = null;
+let historyData = [];
+let historyFilter = 'ALL';
+let invFile = null;
+let sowFile = null;
+let isSignUp = false;
 
-const { createClient } = supabase;
-const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+// ── Session ────────────────────────────────────────────────────────────────
 
-let state = { invFile: null, sowFile: null, history: [], filter: 'ALL' };
+function saveSession(s) {
+  session = s;
+  localStorage.setItem('ir_session', JSON.stringify(s));
+}
 
-async function initDB() {
+function loadSession() {
+  try { return JSON.parse(localStorage.getItem('ir_session')); } catch { return null; }
+}
+
+async function init() {
+  const saved = loadSession();
+  if (!saved?.access_token) return showAuth();
   try {
-    const { error } = await db.from('reconciliations').select('id').limit(1);
-    if (error) throw error;
-    document.getElementById('db-dot').className = 'dot connected';
-    document.getElementById('db-label').textContent = 'Connected to Supabase';
-    loadHistory();
+    const r = await fetch('/api/auth/user', { headers: { 'Authorization': `Bearer ${saved.access_token}` } });
+    const d = await r.json();
+    if (d.user && d.user.id) { session = saved; currentUser = d.user; showApp(); }
+    else { localStorage.removeItem('ir_session'); showAuth(); }
+  } catch { showAuth(); }
+}
+
+// ── Auth UI ────────────────────────────────────────────────────────────────
+
+function showAuth() {
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('app-screen').style.display = 'none';
+}
+
+function showApp() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'block';
+  document.getElementById('user-email-display').textContent = currentUser.email;
+  loadHistory();
+  loadTeam();
+}
+
+function toggleAuthMode() {
+  isSignUp = !isSignUp;
+  document.getElementById('auth-title').textContent = isSignUp ? 'Create account' : 'Sign in';
+  document.getElementById('auth-btn').textContent = isSignUp ? 'Create account' : 'Sign in';
+  document.getElementById('auth-toggle-text').textContent = isSignUp ? 'Already have an account?' : "Don't have an account?";
+  document.querySelector('.auth-toggle a').textContent = isSignUp ? 'Sign in' : 'Sign up';
+  document.getElementById('field-name').style.display = isSignUp ? 'block' : 'none';
+  document.getElementById('auth-error').style.display = 'none';
+  document.getElementById('auth-success').style.display = 'none';
+}
+
+function setAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+function setAuthSuccess(msg) {
+  const el = document.getElementById('auth-success');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+async function submitAuth() {
+  const email = document.getElementById('input-email').value.trim();
+  const password = document.getElementById('input-password').value;
+  const name = document.getElementById('input-name').value.trim();
+  const btn = document.getElementById('auth-btn');
+
+  if (!email || !password) return setAuthError('Please enter your email and password.');
+  setAuthError('');
+  setAuthSuccess('');
+  btn.disabled = true;
+  btn.textContent = isSignUp ? 'Creating account...' : 'Signing in...';
+
+  try {
+    const endpoint = isSignUp ? '/api/auth/signup' : '/api/auth/signin';
+    const body = isSignUp ? { email, password, name } : { email, password };
+    const r = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const d = await r.json();
+
+    if (d.error) { setAuthError(d.error); btn.disabled = false; btn.textContent = isSignUp ? 'Create account' : 'Sign in'; return; }
+
+    if (isSignUp && !d.session) {
+      setAuthSuccess('Account created! Check your email to confirm, then sign in.');
+      btn.disabled = false;
+      btn.textContent = 'Create account';
+      return;
+    }
+
+    saveSession(d.session);
+    currentUser = d.user;
+    showApp();
   } catch (e) {
-    document.getElementById('db-dot').className = 'dot error';
-    document.getElementById('db-label').textContent = 'DB connection failed: ' + e.message;
+    setAuthError('Something went wrong. Try again.');
+    btn.disabled = false;
+    btn.textContent = isSignUp ? 'Create account' : 'Sign in';
   }
 }
+
+function signOut() {
+  localStorage.removeItem('ir_session');
+  session = null; currentUser = null; currentTeam = null;
+  showAuth();
+}
+
+// ── App helpers ────────────────────────────────────────────────────────────
+
+function authHeader() { return { 'Authorization': `Bearer ${session?.access_token}` }; }
 
 function showToast(msg) {
   const t = document.getElementById('toast');
@@ -202,101 +398,62 @@ function showToast(msg) {
 }
 
 function switchTab(t) {
-  document.querySelectorAll('.tab').forEach((el, i) => el.classList.toggle('active', ['upload','results','history'][i] === t));
+  const tabs = ['upload','results','history','team'];
+  document.querySelectorAll('.tab').forEach((el, i) => el.classList.toggle('active', tabs[i] === t));
   document.querySelectorAll('.panel').forEach(el => el.classList.remove('active'));
   document.getElementById('panel-' + t).classList.add('active');
 }
 
 function handleFile(e, type) {
-  const file = e.target.files[0];
-  if (!file) return;
-  if (type === 'invoice') {
-    state.invFile = file;
-    document.getElementById('inv-filename').style.display = 'flex';
-    document.getElementById('inv-name').textContent = file.name;
-  } else {
-    state.sowFile = file;
-    document.getElementById('sow-filename').style.display = 'flex';
-    document.getElementById('sow-name').textContent = file.name;
-  }
+  const file = e.target.files[0]; if (!file) return;
+  if (type === 'invoice') { invFile = file; document.getElementById('inv-filename').style.display = 'flex'; document.getElementById('inv-name').textContent = file.name; }
+  else { sowFile = file; document.getElementById('sow-filename').style.display = 'flex'; document.getElementById('sow-name').textContent = file.name; }
 }
 
 function clearFile(type) {
-  if (type === 'invoice') {
-    state.invFile = null;
-    document.getElementById('inv-filename').style.display = 'none';
-    document.getElementById('inv-file').value = '';
-  } else {
-    state.sowFile = null;
-    document.getElementById('sow-filename').style.display = 'none';
-    document.getElementById('sow-file').value = '';
-  }
+  if (type === 'invoice') { invFile = null; document.getElementById('inv-filename').style.display = 'none'; document.getElementById('inv-file').value = ''; }
+  else { sowFile = null; document.getElementById('sow-filename').style.display = 'none'; document.getElementById('sow-file').value = ''; }
 }
 
 function loadDemo() {
   document.getElementById('inv-text').value = `INVOICE #1042\nABC Electrical LLC\nDate: March 10, 2026\nProject: Westbrook Apartments, Unit 4B\n\nLine Items:\n- Electrical labor: 40 hrs @ $85/hr = $3,400\n- Wire & cable materials: $850\n- Conduit (floors 3-5): $1,100\n- Panel connection work: $450\n- Permit fee: $250\n- Rush surcharge: $300\n\nSUBTOTAL: $6,350\nTAX (8.25%): $524\nTOTAL DUE: $6,874`;
-  document.getElementById('sow-text').value = `SCOPE OF WORK — Electrical Rough-In\nProject: Westbrook Apartments, Unit 4B\nContractor: ABC Electrical LLC\nApproved: Feb 28, 2026\n\nApproved Scope:\n- Electrical rough-in labor: 32 hrs @ $85/hr (max)\n- Materials budget: $900 (wire, outlets, boxes)\n- Panel connections for Unit 4B\n- Permit procurement (owner-supplied, $0 to sub)\n\nNOT IN SCOPE:\n- Conduit runs on floors 3-5 (separate contract)\n- Rush/premium charges not pre-approved\n- Any work outside Unit 4B\n\nPayment terms: Net 30 upon inspection approval.`;
+  document.getElementById('sow-text').value = `SCOPE OF WORK — Electrical Rough-In\nProject: Westbrook Apartments, Unit 4B\nContractor: ABC Electrical LLC\nApproved: Feb 28, 2026\n\nApproved Scope:\n- Electrical rough-in labor: 32 hrs @ $85/hr (max)\n- Materials budget: $900 (wire, outlets, boxes)\n- Panel connections for Unit 4B\n- Permit procurement (owner-supplied, $0 to sub)\n\nNOT IN SCOPE:\n- Conduit runs on floors 3-5 (separate contract)\n- Rush/premium charges not pre-approved\n\nPayment terms: Net 30 upon inspection approval.`;
   document.getElementById('sub-name').value = 'ABC Electrical LLC';
 }
+
+// ── Analyze ────────────────────────────────────────────────────────────────
 
 async function runAnalysis() {
   const invText = document.getElementById('inv-text').value.trim();
   const sowText = document.getElementById('sow-text').value.trim();
   const subName = document.getElementById('sub-name').value.trim();
-
-  if (!invText && !state.invFile) { alert('Please provide an invoice (text or file).'); return; }
-  if (!sowText && !state.sowFile) { alert('Please provide a scope of work (text or file).'); return; }
+  if (!invText && !invFile) { alert('Please provide an invoice.'); return; }
+  if (!sowText && !sowFile) { alert('Please provide a scope of work.'); return; }
 
   const btn = document.getElementById('analyze-btn');
   const status = document.getElementById('analyze-status');
   btn.disabled = true;
-  status.innerHTML = '<span class="spinner"></span> Analyzing with AI...';
-
+  status.innerHTML = '<span class="spinner"></span> Analyzing...';
   switchTab('results');
   document.getElementById('results-content').innerHTML = '<div class="loading-box"><span class="spinner" style="width:22px;height:22px;margin-right:0;display:block;margin:0 auto 12px;"></span>Reading documents and reconciling...</div>';
 
   try {
-    // Use FormData so we can send files + text together
-    const formData = new FormData();
-    if (invText) formData.append('invoice_text', invText);
-    if (sowText) formData.append('scope_text', sowText);
-    if (subName) formData.append('sub_name', subName);
-    if (state.invFile) formData.append('invoice_file', state.invFile);
-    if (state.sowFile) formData.append('scope_file', state.sowFile);
+    const fd = new FormData();
+    if (invText) fd.append('invoice_text', invText);
+    if (sowText) fd.append('scope_text', sowText);
+    if (subName) fd.append('sub_name', subName);
+    if (invFile) fd.append('invoice_file', invFile);
+    if (sowFile) fd.append('scope_file', sowFile);
 
-    // Call our local server — no CORS issues, API key stays safe
-    const resp = await fetch('/api/analyze', { method: 'POST', body: formData });
-    const data = await resp.json();
+    const r = await fetch('/api/analyze', { method: 'POST', headers: authHeader(), body: fd });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
 
-    if (data.error) throw new Error(data.error);
-    const result = data.result;
-
-    // Save to Supabase
-    const { error: dbError } = await db.from('reconciliations').insert({
-      sub_name: result.sub_name,
-      invoice_number: result.invoice_number,
-      invoice_total: result.invoice_total,
-      approved_total: result.approved_total,
-      discrepancy_amount: result.discrepancy_amount,
-      recommendation: result.recommendation,
-      summary: result.summary,
-      result_json: result,
-      invoice_text: invText,
-      scope_text: sowText
-    });
-
-    if (dbError) showToast('Analysis done but DB save failed: ' + dbError.message);
-    else { showToast('Saved to Supabase'); loadHistory(); }
-
-    renderResult(result);
-
+    showToast('Saved to database');
+    loadHistory();
+    renderResult(d.result);
   } catch (err) {
-    document.getElementById('results-content').innerHTML = `
-      <div class="section-card">
-        <h3 style="color:#dc2626;">Analysis failed</h3>
-        <p style="font-size:14px;margin-top:8px;color:#666;">${err.message}</p>
-        <p style="font-size:13px;margin-top:8px;color:#888;">Make sure the server is running: <code>npm start</code> in your terminal.</p>
-      </div>`;
+    document.getElementById('results-content').innerHTML = `<div class="section-card"><h3 style="color:#dc2626;">Analysis failed</h3><p style="font-size:14px;margin-top:8px;color:#666;">${err.message}</p></div>`;
   }
 
   btn.disabled = false;
@@ -308,10 +465,7 @@ function renderResult(result) {
   const disc = Math.abs(result.discrepancy_amount || 0);
 
   const flagsHtml = (result.flags || []).map(f =>
-    `<div class="flag ${f.severity}">
-      <span class="flag-icon">${f.severity === 'danger' ? '✕' : f.severity === 'warning' ? '!' : 'i'}</span>
-      <div><strong>${f.title}</strong><br><span style="color:#555;">${f.detail}</span></div>
-    </div>`
+    `<div class="flag ${f.severity}"><span class="flag-icon">${f.severity === 'danger' ? '✕' : f.severity === 'warning' ? '!' : 'i'}</span><div><strong>${f.title}</strong><br><span style="color:#555;">${f.detail}</span></div></div>`
   ).join('');
 
   const rowsHtml = (result.line_items || []).map(li => {
@@ -327,10 +481,7 @@ function renderResult(result) {
 
   document.getElementById('results-content').innerHTML = `
     <div class="result-header">
-      <div>
-        <h2>${result.sub_name || 'Invoice Analysis'}${result.invoice_number ? ' — #' + result.invoice_number : ''}</h2>
-        <p>${result.summary}</p>
-      </div>
+      <div><h2>${result.sub_name || 'Invoice Analysis'}${result.invoice_number ? ' — #' + result.invoice_number : ''}</h2><p>${result.summary}</p></div>
       <div class="rec-badge ${rec}">${rec}</div>
     </div>
     <div class="summary-grid">
@@ -342,46 +493,39 @@ function renderResult(result) {
     <div class="section-card">
       <h3>Line item breakdown</h3>
       <table>
-        <thead><tr>
-          <th style="width:34%">Description</th>
-          <th style="width:14%;text-align:right">Invoiced</th>
-          <th style="width:14%;text-align:right">Approved</th>
-          <th style="width:18%;text-align:center">Status</th>
-          <th style="width:20%">Note</th>
-        </tr></thead>
+        <thead><tr><th style="width:34%">Description</th><th style="width:14%;text-align:right">Invoiced</th><th style="width:14%;text-align:right">Approved</th><th style="width:18%;text-align:center">Status</th><th style="width:20%">Note</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>
     </div>
     <div class="actions">
-      <button class="btn btn-primary" onclick="exportResult()">Export report</button>
+      <button class="btn" style="background:#1a1a1a;color:#fff;border-color:#1a1a1a;" onclick="exportResult()">Export report</button>
       <button class="btn" onclick="switchTab('upload')">New reconciliation</button>
     </div>`;
 }
 
+// ── History ────────────────────────────────────────────────────────────────
+
+async function loadHistory() {
+  try {
+    const r = await fetch('/api/reconciliations', { headers: authHeader() });
+    if (!r.ok) return;
+    historyData = await r.json() || [];
+    document.getElementById('history-count').textContent = historyData.length ? `(${historyData.length})` : '';
+    renderHistory();
+  } catch (e) { console.error(e); }
+}
+
 function filterHistory(val, el) {
-  state.filter = val;
+  historyFilter = val;
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   el.classList.add('active');
   renderHistory();
 }
 
-async function loadHistory() {
-  try {
-    const { data, error } = await db.from('reconciliations').select('*').order('created_at', { ascending: false }).limit(100);
-    if (error) throw error;
-    state.history = data || [];
-    document.getElementById('history-count').textContent = state.history.length ? `(${state.history.length})` : '';
-    renderHistory();
-  } catch (e) {
-    document.getElementById('history-list').innerHTML = `<div class="empty">Failed to load: ${e.message}</div>`;
-  }
-}
-
 function renderHistory() {
   const list = document.getElementById('history-list');
-  let items = state.filter === 'ALL' ? state.history : state.history.filter(h => h.recommendation === state.filter);
+  const items = historyFilter === 'ALL' ? historyData : historyData.filter(h => h.recommendation === historyFilter);
   if (!items.length) { list.innerHTML = '<div class="empty">No records found.</div>'; return; }
-
   list.innerHTML = items.map(h => {
     const disc = h.discrepancy_amount || 0;
     const ts = new Date(h.created_at).toLocaleString();
@@ -395,30 +539,89 @@ function renderHistory() {
         ${disc > 0 ? `<div style="font-size:11px;color:#dc2626;">+$${Number(disc).toLocaleString()} over</div>` : ''}
       </div>
       <div class="rec-badge ${h.recommendation}" style="font-size:12px;padding:4px 12px;">${h.recommendation}</div>
-      <button class="btn btn-danger" style="font-size:12px;padding:5px 12px;" onclick="deleteRecord('${h.id}',event)">Delete</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteRecord('${h.id}',event)">Delete</button>
     </div>`;
   }).join('');
 }
 
 async function deleteRecord(id, e) {
   e.stopPropagation();
-  if (!confirm('Delete this reconciliation record?')) return;
-  const { error } = await db.from('reconciliations').delete().eq('id', id);
-  if (error) { showToast('Delete failed: ' + error.message); return; }
+  if (!confirm('Delete this record?')) return;
+  await fetch(`/api/reconciliations/${id}`, { method: 'DELETE', headers: authHeader() });
   showToast('Record deleted');
   loadHistory();
 }
 
 function exportResult() {
-  const content = document.getElementById('results-content').innerText;
-  const blob = new Blob([content], { type: 'text/plain' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'reconciliation-report.txt';
-  a.click();
+  const blob = new Blob([document.getElementById('results-content').innerText], { type: 'text/plain' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'reconciliation-report.txt'; a.click();
 }
 
-initDB();
+// ── Team ───────────────────────────────────────────────────────────────────
+
+async function loadTeam() {
+  try {
+    const r = await fetch('/api/teams', { headers: authHeader() });
+    const teams = await r.json();
+    if (teams?.length) { currentTeam = teams[0]; renderTeam(); }
+  } catch (e) { console.error(e); }
+}
+
+async function createTeam() {
+  const name = document.getElementById('team-name-input').value.trim();
+  if (!name) return alert('Please enter a team name.');
+  if (!currentUser) return alert('Session error — please sign out and sign in again.');
+  try {
+    const r = await fetch('/api/teams', {
+      method: 'POST',
+      headers: { ...authHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    const team = await r.json();
+    if (team.error) { showToast('Error: ' + team.error); return; }
+    currentTeam = team;
+    currentTeam.team_members = [{ user_id: currentUser.id, role: 'owner' }];
+    showToast('Team created!');
+    renderTeam();
+  } catch (e) { showToast('Error: ' + e.message); }
+}
+
+function renderTeam() {
+  document.getElementById('team-create-section').style.display = 'none';
+  document.getElementById('team-info-section').style.display = 'block';
+  document.getElementById('team-name-display').textContent = currentTeam.name;
+  const members = currentTeam.team_members || [];
+  document.getElementById('members-list').innerHTML = members.length
+    ? members.map(m => `<div class="member-row"><div style="flex:1;font-size:14px;">${m.user_id === currentUser.id ? 'You' : m.user_id}</div><span class="role-badge ${m.role}">${m.role}</span></div>`).join('')
+    : '<div style="font-size:14px;color:#888;">No members yet — invite someone below.</div>';
+}
+
+async function sendInvite() {
+  if (!currentTeam) return alert('Create a team first.');
+  const email = document.getElementById('invite-email').value.trim();
+  if (!email) return alert('Enter an email address.');
+  const statusEl = document.getElementById('invite-status');
+  statusEl.textContent = 'Sending...';
+  const r = await fetch('/api/invites', {
+    method: 'POST',
+    headers: { ...authHeader(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ team_id: currentTeam.id, email })
+  });
+  const d = await r.json();
+  if (d.error) { statusEl.textContent = 'Error: ' + d.error; return; }
+  statusEl.textContent = `Invite sent to ${email}`;
+  document.getElementById('invite-email').value = '';
+  showToast('Invite sent');
+}
+
+// ── Reconciliations REST endpoints (proxied through server) ────────────────
+// These are handled server-side via Supabase REST — we just need GET and DELETE
+
+const _origFetch = window.fetch;
+
+init();
 </script>
+
+<!-- Add reconciliation REST proxy routes handled server-side -->
 </body>
 </html>
